@@ -114,7 +114,7 @@
   /* Week */
   .wk-row { border-top: 1px solid var(--rule); position: relative; width: max-content; min-width: 100%; display: flex; }
   .wk-row.today { background: color-mix(in srgb, var(--accent) 6%, transparent); }
-  .wk-inner { padding: 6px 20px 8px 0; flex: 1; display: flex; flex-direction: column; } .week.x .wk-inner > .tbox { flex: 1; }
+  .wk-inner { padding: 6px 20px 8px 0; flex: 1; display: flex; flex-direction: column; } .week.x .wk-inner > .tbox { flex: 1 0 auto; }
   .wk-day { border: 0; background: transparent; cursor: pointer; text-align: left; padding: 6px 0; display: block; }
   .wk-row .wk-day { position: sticky; left: 0; width: 100px; padding-left: 20px; z-index: 3; background: var(--bg); align-self: stretch; flex: none; }
   .wk-row.today .wk-day { background: color-mix(in srgb, var(--accent) 6%, var(--bg)); }
