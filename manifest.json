@@ -1,7 +1,7 @@
 {
   "id": "space-calendar",
   "name": "Space Calendar",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "minAppVersion": "1.8.7",
   "description": "Day, Week, Month and Now views for Kanban cards with dates, daily notes, ICS feeds and Google Calendar.",
   "author": "Maryan",

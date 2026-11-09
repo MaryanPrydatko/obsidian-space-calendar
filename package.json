@@ -1,6 +1,6 @@
 {
   "name": "obsidian-space-calendar",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "The Space calendar in Obsidian: Kanban cards, daily notes, ICS feeds and Google Calendar.",
   "private": true,
   "type": "module",

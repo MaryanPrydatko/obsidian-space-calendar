@@ -34,6 +34,8 @@ export class GoogleSource {
   private st: 'ok' | 'expired' | 'error' = 'ok';
   private loading = false;
   private seq = 0;
+  /** Changes sent to Google and not answered yet (null: deleted). A fetch that lands meanwhile keeps them on screen. */
+  private pending = new Map<string, Item | null>();
   constructor(private local: Local, private changed: () => void) {}
 
   // ---------- settings, per device ----------
@@ -195,6 +197,7 @@ export class GoogleSource {
       if (n !== this.seq) return; // a change was made meanwhile: its own answer is newer
       const bad = res.find((r) => r.status === 'rejected') as PromiseRejectedResult | undefined;
       if (bad && res.every((r) => r.status === 'rejected')) throw bad.reason;
+      for (const [id, v] of this.pending) { const i = out.findIndex((x) => x.id === id); if (v == null) { if (i >= 0) out.splice(i, 1); } else if (i >= 0) out[i] = v; else out.push(v); }
       this.span = { a: +a, b: +b, events: out, at: Date.now() }; this.st = this.st === 'expired' ? 'expired' : 'ok';
     } catch (e) {
       if (e instanceof GoogleError && e.status === 401) this.st = this.connected() ? 'error' : 'expired'; else this.st = 'error';
@@ -225,26 +228,27 @@ export class GoogleSource {
     if (!cal) throw new GoogleError(404);
     const shown: Item = { ...it, ...(f.title !== undefined ? { title: f.title } : {}), ...(f.start ? { start: f.start, end: f.end!, allDay: !!f.allDay } : {}), ...(f.location !== undefined ? { location: f.location } : {}), ...(f.desc !== undefined ? { desc: f.desc } : {}) };
     if (f.colorId !== undefined) { shown.color = f.colorId ? COLORS[f.colorId][1] : g.calColor || it.color; shown.g = { ...g, colorId: f.colorId }; }
-    const prev = this.swap(it.id, shown);
+    const prev = this.swap(it.id, shown); this.pending.set(it.id, shown);
     try {
       const e = await this.api(cal.acct, 'PATCH', '/calendars/' + encodeURIComponent(g.cal) + '/events/' + encodeURIComponent(g.id), { body: this.body(f), ifMatch: g.etag || undefined, query: { sendUpdates: 'none' } });
-      const out = this.toItem(e, cal); this.swap(it.id, out); return out;
-    } catch (e) { this.swap(it.id, prev); throw e; }
+      const out = this.toItem(e, cal); this.pending.delete(it.id); this.swap(it.id, out); return out;
+    } catch (e) { this.pending.delete(it.id); this.swap(it.id, prev); throw e; }
   }
   async create(calId: string, f: GFields): Promise<Item> {
     const cal = (await this.calendars()).find((c) => c.id === calId); if (!cal) throw new GoogleError(404);
     const tmp = 'g:' + calId + ':new-' + Date.now().toString(36);
-    this.swap(tmp, { id: tmp, title: f.title || '', start: f.start!, end: f.end!, allDay: !!f.allDay, color: f.colorId ? COLORS[f.colorId][1] : cal.color, kind: 'event', src: 'google', calName: cal.name, g: { cal: calId, id: '', etag: '' } });
+    const shown: Item = { id: tmp, title: f.title || '', start: f.start!, end: f.end!, allDay: !!f.allDay, color: f.colorId ? COLORS[f.colorId][1] : cal.color, kind: 'event', src: 'google', calName: cal.name, g: { cal: calId, id: '', etag: '' } }; this.swap(tmp, shown); this.pending.set(tmp, shown);
     try {
       const b = this.body(f); if (!b.colorId) delete b.colorId;
       const e = await this.api(cal.acct, 'POST', '/calendars/' + encodeURIComponent(calId) + '/events', { body: b });
-      const out = this.toItem(e, cal); this.swap(tmp, null); this.swap(out.id, out); return out;
-    } catch (e) { this.swap(tmp, null); throw e; }
+      const out = this.toItem(e, cal); this.pending.delete(tmp); this.swap(tmp, null); this.swap(out.id, out); return out;
+    } catch (e) { this.pending.delete(tmp); this.swap(tmp, null); throw e; }
   }
   async remove(it: Item): Promise<void> {
     const g = it.g!, cal = (await this.calendars()).find((c) => c.id === g.cal); if (!cal) throw new GoogleError(404);
-    const prev = this.swap(it.id, null);
+    const prev = this.swap(it.id, null); this.pending.set(it.id, null);
     try { await this.api(cal.acct, 'DELETE', '/calendars/' + encodeURIComponent(g.cal) + '/events/' + encodeURIComponent(g.id), { ifMatch: g.etag || undefined, query: { sendUpdates: 'none' } }); }
-    catch (e) { if (prev) this.swap(it.id, prev); throw e; }
+    catch (e) { this.pending.delete(it.id); if (prev) this.swap(it.id, prev); throw e; }
+    this.pending.delete(it.id);
   }
 }
