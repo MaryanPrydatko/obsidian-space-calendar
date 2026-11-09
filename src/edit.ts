@@ -318,6 +318,9 @@ export function editor(C: V, it: Item | null, at: any, nw?: { a: Date; b: Date; 
   r1.append(el('span', 'pop-lab', 'From'), sd, st); r2.append(el('span', 'pop-lab', 'To'), ed, et); when.append(r1, r2, allL); p.append(when);
   const showTimes = () => { st.hidden = et.hidden = all.checked; }; showTimes();
   all.onchange = () => { if (!all.checked && ad0) { st.value = '09:00'; et.value = '10:00'; ed.value = sd.value; } showTimes(); };
+  // the calendar list comes first: the colour swatches read it (a new event's 'calendar colour')
+  let cals: GCal[] = [];
+  const sel = el('select', 'pop-f'); sel.setAttribute('aria-label', 'Calendar');
   // colour: the calendar's, or one of Google's eleven
   let color = isNew ? '' : it!.g?.colorId || '';
   const sws = el('div', 'swatches'); sws.setAttribute('role', 'radiogroup'); sws.setAttribute('aria-label', 'Colour');
@@ -341,8 +344,6 @@ export function editor(C: V, it: Item | null, at: any, nw?: { a: Date; b: Date; 
   { const eb = el('button', 'pop-link', desc0 ? 'Edit description' : 'Add description'); eb.type = 'button'; eb.onclick = openNotes; nbox.append(eb); }
   p.append(nbox);
   // calendar: a new one goes into any of yours
-  let cals: GCal[] = [];
-  const sel = el('select', 'pop-f'); sel.setAttribute('aria-label', 'Calendar');
   const calRow = el('div', 'pop-line'); calRow.hidden = true; calRow.append(el('span', 'pop-lab', 'Calendar'), sel); if (isNew) p.append(calRow);
   let loaded = !isNew;
   const calsP = isNew ? C.plugin.google.writable().catch(() => []).then((list) => {
