@@ -111,13 +111,18 @@ class SpaceCalSettingTab extends PluginSettingTab {
       input.onchange = async () => { const f = input.files?.[0]; input.remove(); if (f) loadClient(await f.text()); };
       input.click();
     }));
-    const g = new Setting(c).setName(P.google.connected() ? 'Connected' + (P.google.email() ? ' as ' + P.google.email() : '') : 'Not connected');
-    g.addButton((b) => b.setButtonText(P.google.connected() ? 'Connect again' : 'Save and connect').setCta().onClick(async () => {
-      P.google.setClient(id, secret);
-      try { const who = await P.google.connect(); new Notice('Space Calendar: Google connected' + (who ? ' as ' + who : '') + '.'); }
-      catch (e) { new Notice('Space Calendar: ' + (e instanceof Error ? e.message : String(e)), 8000); }
-      this.display();
-    }));
-    if (P.google.connected()) g.addButton((b) => b.setButtonText('Disconnect').onClick(async () => { await P.google.disconnect(); this.display(); }));
+    // one row per signed-in account, then a button to add one more (Google asks which account)
+    for (const who of P.google.emails()) {
+      new Setting(c).setName('Connected as ' + who)
+        .addButton((b) => b.setButtonText('Disconnect').onClick(async () => { await P.google.disconnect(who); this.display(); }));
+    }
+    const any = P.google.connected();
+    new Setting(c).setName(any ? 'Another Google account' : 'Not connected').setDesc(any ? 'Google asks which account. Signing in to one that is already here signs it in again.' : '')
+      .addButton((b) => b.setButtonText(any ? 'Add account' : 'Save and connect').setCta().onClick(async () => {
+        P.google.setClient(id, secret);
+        try { const who = await P.google.connect(); new Notice('Space Calendar: Google connected' + (who ? ' as ' + who : '') + '.'); }
+        catch (e) { new Notice('Space Calendar: ' + (e instanceof Error ? e.message : String(e)), 8000); }
+        this.display();
+      }));
   }
 }

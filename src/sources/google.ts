@@ -20,14 +20,16 @@ const API = 'https://www.googleapis.com/calendar/v3';
 export class GoogleError extends Error { constructor(public status: number, msg?: string) { super(msg || 'google ' + status); } }
 
 interface Tokens { refresh: string; access: string; exp: number; email: string }
-export interface GCal { id: string; name: string; color: string; primary: boolean; access: string }
+/** acct: the signed-in account (its email) the calendar is read and written through. */
+export interface GCal { id: string; name: string; color: string; primary: boolean; access: string; acct: string }
+const RANK: Record<string, number> = { owner: 3, writer: 2, reader: 1, freeBusyReader: 0 };
 
 const b64url = (b: Uint8Array): string => btoa(String.fromCharCode(...b)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 const rand = (n: number): string => b64url(crypto.getRandomValues(new Uint8Array(n)));
 const form = (d: Record<string, string>): string => new URLSearchParams(d).toString();
 
 export class GoogleSource {
-  private cals: GCal[] | null = null;
+  private cals: GCal[] | null = null; // every account's calendars together, one entry per calendar id
   private span: { a: number; b: number; events: Item[]; at: number } | null = null;
   private st: 'ok' | 'expired' | 'error' = 'ok';
   private loading = false;
@@ -38,11 +40,20 @@ export class GoogleSource {
   clientId(): string { return this.local.get<string>('google-client-id', ''); }
   clientSecret(): string { return this.local.get<string>('google-client-secret', ''); }
   setClient(id: string, secret: string): void { this.local.set('google-client-id', id.trim()); this.local.set('google-client-secret', secret.trim()); }
-  private tokens(): Tokens | null { return this.local.get<Tokens | null>('google-tokens', null); }
-  private setTokens(t: Tokens | null): void { this.local.set('google-tokens', t); }
-  email(): string { return this.tokens()?.email || ''; }
+  // Several Google accounts, each with its own sign-in. The one account of the first version moves into the list.
+  private accounts(): Tokens[] {
+    const list = this.local.get<Tokens[] | null>('google-accounts', null);
+    if (list) return list.filter((t) => t && t.refresh);
+    const one = this.local.get<Tokens | null>('google-tokens', null);
+    if (one && one.refresh) { this.local.set('google-accounts', [one]); this.local.set('google-tokens', null); return [one]; }
+    return [];
+  }
+  private setAccounts(list: Tokens[]): void { this.local.set('google-accounts', list.length ? list : null); }
+  private upsert(t: Tokens): void { const list = this.accounts(), i = list.findIndex((x) => x.email === t.email); if (i >= 0) list[i] = t; else list.push(t); this.setAccounts(list); }
+  emails(): string[] { return this.accounts().map((t) => t.email); }
+  email(): string { return this.emails().join(', '); }
   configured(): boolean { return !!this.clientId(); }
-  connected(): boolean { return this.configured() && !!this.tokens()?.refresh; }
+  connected(): boolean { return this.configured() && this.accounts().length > 0; }
   state(): 'off' | 'ok' | 'expired' | 'error' { return this.connected() ? this.st : this.configured() && this.st === 'expired' ? 'expired' : 'off'; }
 
   // ---------- sign-in: PKCE with a loopback redirect (desktop only) ----------
@@ -68,7 +79,7 @@ export class GoogleSource {
       server.on('error', (e: Error) => { clearTimeout(timer); reject(e); });
       server.listen(0, '127.0.0.1', () => {
         redirect = 'http://127.0.0.1:' + server.address().port;
-        const q = new URLSearchParams({ client_id: id, redirect_uri: redirect, response_type: 'code', scope: SCOPE, access_type: 'offline', prompt: 'consent', code_challenge: challenge, code_challenge_method: 'S256', state });
+        const q = new URLSearchParams({ client_id: id, redirect_uri: redirect, response_type: 'code', scope: SCOPE, access_type: 'offline', prompt: 'select_account consent', code_challenge: challenge, code_challenge_method: 'S256', state });
         window.open(AUTH_URL + '?' + q.toString()); // Obsidian opens it in the system browser
       });
     });
@@ -79,36 +90,39 @@ export class GoogleSource {
     if (r.status >= 400 || !j.access_token) throw new Error('Google refused the sign-in: ' + (j.error_description || j.error || r.status));
     if (!String(j.scope || '').split(' ').includes(SCOPE)) throw new Error('The calendar permission was not ticked. Connect again and tick it.');
     if (!j.refresh_token) throw new Error('Google gave no refresh token. Remove the app at myaccount.google.com/permissions and connect again.');
-    this.setTokens({ refresh: j.refresh_token, access: j.access_token, exp: Date.now() + (Number(j.expires_in) || 3600) * 1000, email: '' });
+    // which account this is: its primary calendar's id is its email
+    const who = await requestUrl({ url: API + '/users/me/calendarList?minAccessRole=owner&maxResults=250', headers: { Authorization: 'Bearer ' + j.access_token }, throw: false });
+    const email = String(((who.status < 400 && who.json?.items) || []).find((c: any) => c.primary)?.id || '');
+    if (!email) throw new Error('Google connected, but did not say which account this is. Try again.');
+    this.upsert({ refresh: j.refresh_token, access: j.access_token, exp: Date.now() + (Number(j.expires_in) || 3600) * 1000, email });
     this.st = 'ok'; this.cals = null; this.span = null;
-    const cals = await this.calendars().catch(() => [] as GCal[]), p = cals.find((c) => c.primary);
-    const t = this.tokens(); if (t) this.setTokens({ ...t, email: p ? p.id : '' });
     this.changed();
-    return p ? p.id : '';
+    return email;
   }
-  async disconnect(): Promise<void> {
-    const t = this.tokens();
-    if (t) { try { await requestUrl({ url: REVOKE_URL, method: 'POST', contentType: 'application/x-www-form-urlencoded', body: form({ token: t.refresh || t.access }), throw: false }); } catch { /* forgotten here anyway */ } }
-    this.setTokens(null); this.cals = null; this.span = null; this.st = 'ok'; this.changed();
+  /** Signs one account out (all of them without an email). */
+  async disconnect(email?: string): Promise<void> {
+    const list = this.accounts(), gone = list.filter((t) => !email || t.email === email);
+    for (const t of gone) { try { await requestUrl({ url: REVOKE_URL, method: 'POST', contentType: 'application/x-www-form-urlencoded', body: form({ token: t.refresh || t.access }), throw: false }); } catch { /* forgotten here anyway */ } }
+    this.setAccounts(list.filter((t) => !gone.includes(t))); this.cals = null; this.span = null; this.st = 'ok'; this.changed();
   }
-  private async token(): Promise<string> {
-    const t = this.tokens(); if (!t || !t.refresh) throw new GoogleError(401, 'not connected');
+  private async token(email: string): Promise<string> {
+    const t = this.accounts().find((x) => x.email === email); if (!t || !t.refresh) throw new GoogleError(401, 'not connected');
     if (t.access && t.exp > Date.now() + 60e3) return t.access;
     const body: Record<string, string> = { client_id: this.clientId(), refresh_token: t.refresh, grant_type: 'refresh_token' };
     if (this.clientSecret()) body.client_secret = this.clientSecret();
     const r = await requestUrl({ url: TOKEN_URL, method: 'POST', contentType: 'application/x-www-form-urlencoded', body: form(body), throw: false });
     const j = r.json || {};
     if (r.status >= 400 || !j.access_token) {
-      if (j.error === 'invalid_grant') { this.setTokens(null); this.st = 'expired'; this.changed(); }
+      if (j.error === 'invalid_grant') { this.setAccounts(this.accounts().filter((x) => x.email !== email)); this.cals = null; this.st = 'expired'; this.changed(); }
       throw new GoogleError(401, 'refresh failed');
     }
-    this.setTokens({ ...t, access: j.access_token, exp: Date.now() + (Number(j.expires_in) || 3600) * 1000, refresh: j.refresh_token || t.refresh });
+    this.upsert({ ...t, access: j.access_token, exp: Date.now() + (Number(j.expires_in) || 3600) * 1000, refresh: j.refresh_token || t.refresh });
     return j.access_token;
   }
-  private async api(method: string, path: string, o: { query?: Record<string, string | number | undefined>; body?: unknown; ifMatch?: string } = {}): Promise<any> {
+  private async api(acct: string, method: string, path: string, o: { query?: Record<string, string | number | undefined>; body?: unknown; ifMatch?: string } = {}): Promise<any> {
     const u = new URL(API + path);
     for (const [k, v] of Object.entries(o.query || {})) if (v !== undefined) u.searchParams.set(k, String(v));
-    const headers: Record<string, string> = { Authorization: 'Bearer ' + (await this.token()) };
+    const headers: Record<string, string> = { Authorization: 'Bearer ' + (await this.token(acct)) };
     if (o.ifMatch) headers['If-Match'] = o.ifMatch;
     let r;
     try { r = await requestUrl({ url: u.toString(), method, headers, contentType: o.body ? 'application/json' : undefined, body: o.body ? JSON.stringify(o.body) : undefined, throw: false }); }
@@ -121,16 +135,27 @@ export class GoogleSource {
   // ---------- calendars and events ----------
   async calendars(): Promise<GCal[]> {
     if (this.cals) return this.cals;
-    const out: GCal[] = []; let pageToken: string | undefined;
-    for (let i = 0; i < 3; i++) {
-      const j = await this.api('GET', '/users/me/calendarList', { query: { maxResults: 250, pageToken } });
-      for (const c of (j && j.items) || []) if (!c.deleted) out.push({ id: c.id, name: c.summaryOverride || c.summary || c.id, color: c.backgroundColor || '#4C8DF6', primary: !!c.primary, access: c.accessRole || 'none', selected: !!c.selected } as GCal & { selected: boolean });
-      pageToken = j && j.nextPageToken; if (!pageToken) break;
-    }
-    return (this.cals = out);
+    const byId = new Map<string, GCal>(); let failed: unknown = null;
+    await Promise.all(this.emails().map(async (acct) => {
+      try {
+        let pageToken: string | undefined;
+        for (let i = 0; i < 3; i++) {
+          const j = await this.api(acct, 'GET', '/users/me/calendarList', { query: { maxResults: 250, pageToken } });
+          for (const c of (j && j.items) || []) {
+            if (c.deleted) continue;
+            const cal = { id: c.id, name: c.summaryOverride || c.summary || c.id, color: c.backgroundColor || '#4C8DF6', primary: !!c.primary, access: c.accessRole || 'none', acct, selected: !!c.selected } as GCal & { selected: boolean };
+            // a calendar shared with two of your accounts shows once, through the account that may do the most with it
+            const had = byId.get(c.id); if (!had || (RANK[cal.access] ?? 0) > (RANK[had.access] ?? 0)) byId.set(c.id, cal);
+          }
+          pageToken = j && j.nextPageToken; if (!pageToken) break;
+        }
+      } catch (e) { failed = e; } // one account failing still shows the others
+    }));
+    if (!byId.size && failed) throw failed;
+    return (this.cals = [...byId.values()]);
   }
   async writable(): Promise<GCal[]> { return (await this.calendars()).filter((c) => c.access === 'owner' || c.access === 'writer'); }
-  defaultCal(cals: GCal[]): GCal | undefined { const id = this.local.get<string>('google-default-cal', ''); return cals.find((c) => c.id === id) || cals.find((c) => c.primary) || cals[0]; }
+  defaultCal(cals: GCal[]): GCal | undefined { const id = this.local.get<string>('google-default-cal', ''), first = this.emails()[0]; return cals.find((c) => c.id === id) || cals.find((c) => c.primary && c.acct === first) || cals.find((c) => c.primary) || cals[0]; }
 
   private toItem(e: any, c: GCal): Item {
     const allDay = !!(e.start && e.start.date);
@@ -162,13 +187,15 @@ export class GoogleSource {
   private async fetch(a: Date, b: Date): Promise<void> {
     this.loading = true; const n = ++this.seq;
     try {
-      const cals = (await this.calendars()).filter((c: any) => c.selected || c.primary).slice(0, 40), out: Item[] = [];
-      await Promise.all(cals.map(async (c) => {
-        const j = await this.api('GET', '/calendars/' + encodeURIComponent(c.id) + '/events', { query: { timeMin: a.toISOString(), timeMax: b.toISOString(), singleEvents: 'true', orderBy: 'startTime', maxResults: 2500 } });
+      const cals = (await this.calendars()).filter((c: any) => c.selected || c.primary).slice(0, 80), out: Item[] = [];
+      const res = await Promise.allSettled(cals.map(async (c) => {
+        const j = await this.api(c.acct, 'GET', '/calendars/' + encodeURIComponent(c.id) + '/events', { query: { timeMin: a.toISOString(), timeMax: b.toISOString(), singleEvents: 'true', orderBy: 'startTime', maxResults: 2500 } });
         for (const e of (j && j.items) || []) if (e.status !== 'cancelled' && e.start) out.push(this.toItem(e, c));
       }));
       if (n !== this.seq) return; // a change was made meanwhile: its own answer is newer
-      this.span = { a: +a, b: +b, events: out, at: Date.now() }; this.st = 'ok';
+      const bad = res.find((r) => r.status === 'rejected') as PromiseRejectedResult | undefined;
+      if (bad && res.every((r) => r.status === 'rejected')) throw bad.reason;
+      this.span = { a: +a, b: +b, events: out, at: Date.now() }; this.st = this.st === 'expired' ? 'expired' : 'ok';
     } catch (e) {
       if (e instanceof GoogleError && e.status === 401) this.st = this.connected() ? 'error' : 'expired'; else this.st = 'error';
     } finally { this.loading = false; this.changed(); }
@@ -200,7 +227,7 @@ export class GoogleSource {
     if (f.colorId !== undefined) { shown.color = f.colorId ? COLORS[f.colorId][1] : g.calColor || it.color; shown.g = { ...g, colorId: f.colorId }; }
     const prev = this.swap(it.id, shown);
     try {
-      const e = await this.api('PATCH', '/calendars/' + encodeURIComponent(g.cal) + '/events/' + encodeURIComponent(g.id), { body: this.body(f), ifMatch: g.etag || undefined, query: { sendUpdates: 'none' } });
+      const e = await this.api(cal.acct, 'PATCH', '/calendars/' + encodeURIComponent(g.cal) + '/events/' + encodeURIComponent(g.id), { body: this.body(f), ifMatch: g.etag || undefined, query: { sendUpdates: 'none' } });
       const out = this.toItem(e, cal); this.swap(it.id, out); return out;
     } catch (e) { this.swap(it.id, prev); throw e; }
   }
@@ -210,13 +237,14 @@ export class GoogleSource {
     this.swap(tmp, { id: tmp, title: f.title || '', start: f.start!, end: f.end!, allDay: !!f.allDay, color: f.colorId ? COLORS[f.colorId][1] : cal.color, kind: 'event', src: 'google', calName: cal.name, g: { cal: calId, id: '', etag: '' } });
     try {
       const b = this.body(f); if (!b.colorId) delete b.colorId;
-      const e = await this.api('POST', '/calendars/' + encodeURIComponent(calId) + '/events', { body: b });
+      const e = await this.api(cal.acct, 'POST', '/calendars/' + encodeURIComponent(calId) + '/events', { body: b });
       const out = this.toItem(e, cal); this.swap(tmp, null); this.swap(out.id, out); return out;
     } catch (e) { this.swap(tmp, null); throw e; }
   }
   async remove(it: Item): Promise<void> {
-    const g = it.g!, prev = this.swap(it.id, null);
-    try { await this.api('DELETE', '/calendars/' + encodeURIComponent(g.cal) + '/events/' + encodeURIComponent(g.id), { ifMatch: g.etag || undefined, query: { sendUpdates: 'none' } }); }
+    const g = it.g!, cal = (await this.calendars()).find((c) => c.id === g.cal); if (!cal) throw new GoogleError(404);
+    const prev = this.swap(it.id, null);
+    try { await this.api(cal.acct, 'DELETE', '/calendars/' + encodeURIComponent(g.cal) + '/events/' + encodeURIComponent(g.id), { ifMatch: g.etag || undefined, query: { sendUpdates: 'none' } }); }
     catch (e) { if (prev) this.swap(it.id, prev); throw e; }
   }
 }
