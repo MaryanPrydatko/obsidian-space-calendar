@@ -86,6 +86,20 @@ class SpaceCalSettingTab extends PluginSettingTab {
     let id = P.google.clientId(), secret = P.google.clientSecret();
     new Setting(c).setName('OAuth client ID').addText((t) => { t.setValue(id).onChange((v) => { id = v; }); t.inputEl.style.width = '100%'; });
     new Setting(c).setName('OAuth client secret').addText((t) => { t.inputEl.type = 'password'; t.setValue(secret).onChange((v) => { secret = v; }); });
+    // or pick the client_secret_....json Google downloads, instead of pasting both
+    new Setting(c).setName('Or load the file from Google').setDesc('The client_secret_....json file Google downloads when you make the client.').addButton((b) => b.setButtonText('Choose file').onClick(() => {
+      const input = createEl('input', { attr: { type: 'file', accept: '.json,application/json' } });
+      input.onchange = async () => {
+        const file = input.files?.[0]; if (!file) return;
+        try {
+          const j = JSON.parse(await file.text()); const k = j.installed ?? j.web ?? j;
+          if (!k.client_id || !k.client_secret) throw new Error('no client_id or client_secret in that file');
+          P.google.setClient(String(k.client_id), String(k.client_secret));
+          new Notice('Space Calendar: client loaded. Now click Save and connect.'); this.display();
+        } catch (e) { new Notice('Space Calendar: ' + (e instanceof Error ? e.message : String(e)), 8000); }
+      };
+      input.click();
+    }));
     const g = new Setting(c).setName(P.google.connected() ? 'Connected' + (P.google.email() ? ' as ' + P.google.email() : '') : 'Not connected');
     g.addButton((b) => b.setButtonText(P.google.connected() ? 'Connect again' : 'Save and connect').setCta().onClick(async () => {
       P.google.setClient(id, secret);
