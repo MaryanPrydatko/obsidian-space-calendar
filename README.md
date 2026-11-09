@@ -1,8 +1,19 @@
 # Space Calendar
 
-The calendar from Space, in Obsidian. Now, Day, Week (time Across or Down) and Month, with lanes so nothing overlaps, the now line, the "Now" strip, and Undo (Cmd+Z while the calendar has focus).
+A calendar for your Obsidian vault. Now, Day, Week (time Across or Down) and Month, with lanes so nothing overlaps, the now line, the "Now" strip, and Undo (Cmd+Z while the calendar has focus).
 
 Open it with the calendar ribbon icon or the command **Space Calendar: Open calendar**. Keys inside the calendar: 1 to 4 switch views, left and right step, T goes to today, Esc closes a popover.
+
+Works on its own: you do not need Space or anything else. Kanban cards need the [Kanban](https://github.com/mgmeyers/obsidian-kanban) plugin's board format.
+
+## Install
+
+Not in the community plugin list yet. Either:
+
+- With [BRAT](https://github.com/TfTHacker/obsidian42-brat): Add beta plugin, paste `MaryanPrydatko/obsidian-space-calendar`.
+- By hand: download `main.js`, `manifest.json` and `styles.css` from the [latest release](https://github.com/MaryanPrydatko/obsidian-space-calendar/releases/latest) into `<vault>/.obsidian/plugins/space-calendar/`, then turn on Space Calendar in Settings, Community plugins.
+
+Desktop, iPad and iPhone. Connecting Google works in the desktop app; ICS feeds, Kanban cards and daily notes work everywhere.
 
 ## What it shows
 
@@ -12,7 +23,7 @@ Open it with the calendar ribbon icon or the command **Space Calendar: Open cale
    - On today's Day view, open cards with a date in the past wait under "Slipped", with a Today button that moves them to today.
 2. **Daily notes** (`Daily/YYYY-MM-DD.md`, folder in settings) show as a dot on their day. Click it to open the note.
 3. **ICS feeds**, read only. Paste one iCal address per line in settings. Timed, all-day and TZID times; DAILY, WEEKLY (BYDAY), MONTHLY and YEARLY repeats with INTERVAL, COUNT, UNTIL, EXDATE and moved single days. Feeds refresh every 15 minutes and with the command "Refresh calendar feeds".
-4. **Google Calendar**, read and write, once an OAuth client ID is entered. Drag empty time to make an event (double-click for an hour), drag an event to move it, drag its edges to stretch it, Alt-drag to copy, click it for the editor (name, time, all day, colour, place, description, delete), arrow keys move the picked event, Delete twice deletes. A repeating event changes only the day you changed. **Not yet tested against Google**: no client ID existed when this was built.
+4. **Google Calendar**, read and write, once an OAuth client ID is entered. Drag empty time to make an event (double-click for an hour), drag an event to move it, drag its edges to stretch it, Alt-drag to copy, click it for the editor (name, time, all day, colour, place, description, delete), arrow keys move the picked event, Delete twice deletes. A repeating event changes only the day you changed. Several Google accounts can be connected at once.
 
 ## Privacy and sync
 
@@ -20,21 +31,21 @@ Open it with the calendar ribbon icon or the command **Space Calendar: Open cale
 
 ICS addresses, the Google client ID and secret, the Google tokens, and the last view, direction and hour size are kept per device with `app.saveLocalStorage`. They never leave this device.
 
-`manifest.json` sets `isDesktopOnly: true` for now. The code itself has no top-level Node imports; the Google sign-in loads Node's `http` only on desktop, at the moment you connect.
+The code has no top-level Node imports, so it runs on mobile; the Google sign-in loads Node's `http` only on desktop, at the moment you connect.
 
 ## Connect Google Calendar
 
 The quick way, read only: in Google Calendar on the web, open Settings, pick your calendar, **Integrate calendar**, copy **Secret address in iCal format**, and paste it under **Calendar feeds** in the plugin settings. Then **Save and read feeds**.
 
-Read and write, in the existing Google Cloud project `hub` (see Space's `docs/google-setup.md`; the Calendar API, consent screen, test user and calendar scope are already set up there):
+Read and write needs your own Google OAuth client (free, about 5 minutes, once):
 
-1. Open https://console.cloud.google.com/auth/clients with `hub` selected and click **Create client**.
-2. Application type **Desktop app**, name `Obsidian Space Calendar`, **Create**.
-3. Copy the **Client ID** and **Client secret** from the box.
-4. In Obsidian: Settings, Space Calendar, paste both under Google Calendar, click **Save and connect**.
+1. In https://console.cloud.google.com create a project, then enable the **Google Calendar API** for it.
+2. Open **Google Auth Platform**. Set it up as **External**, and under **Audience** add your Google account as a test user.
+3. Under **Clients**, click **Create client**, application type **Desktop app**, any name, **Create**. Copy the **Client ID** and **Client secret**.
+4. In Obsidian on desktop: Settings, Space Calendar, paste both under Google Calendar, click **Save and connect**.
 5. The browser opens Google. Pick your account, click **Continue** on "Google hasn't verified this app", tick the calendar box, **Continue**. The tab says you can close it.
 
-While the `hub` app is in Testing, Google ends the sign-in after 7 days; connect again then, or publish the app as described in `docs/google-setup.md`.
+While the app is in Testing, Google ends the sign-in after 7 days. To stop that, click **Publish app** under Audience; for your own account you only see the "unverified" screen once. The plugin asks for the `calendar` scope.
 
 ## Build
 
@@ -42,10 +53,10 @@ While the `hub` app is in Testing, Google ends the sign-in after 7 days; connect
 npm install
 npm test          # parsers: Kanban cards, the date rewrite, ICS
 npm run build     # typecheck and bundle main.js
-npm run deploy    # build, then copy main.js, manifest.json, styles.css into ~/Obsidian/salamind/.obsidian/plugins/space-calendar/
+SPACE_CAL_DEST=<vault>/.obsidian/plugins/space-calendar npm run deploy   # build, then copy main.js, manifest.json, styles.css there
 ```
 
-`deploy` copies files (never a symlink, which Syncthing would ship dangling). Set `SPACE_CAL_DEST` to deploy elsewhere.
+`deploy` copies files (never a symlink, which a sync tool would ship dangling).
 
 ## Layout
 
@@ -54,3 +65,7 @@ npm run deploy    # build, then copy main.js, manifest.json, styles.css into ~/O
 - `src/edit.ts`: card drags and Google editing (Space's `cal-edit.js`)
 - `src/sources/`: Kanban, daily notes, ICS, Google
 - `styles.css`: Space's calendar look, coloured from the Obsidian theme
+
+## Licence
+
+MIT.
