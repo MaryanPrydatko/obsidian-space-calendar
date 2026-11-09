@@ -1,4 +1,4 @@
-import { App, Notice, Plugin, PluginSettingTab, Setting, TFile, type WorkspaceLeaf } from 'obsidian';
+import { App, Notice, Platform, Plugin, PluginSettingTab, Setting, TFile, type WorkspaceLeaf } from 'obsidian';
 import { DEFAULT_SETTINGS, type SpaceCalSettings } from './types';
 import { Local } from './local';
 import { KanbanSource } from './sources/kanban';
@@ -87,17 +87,28 @@ class SpaceCalSettingTab extends PluginSettingTab {
     new Setting(c).setName('OAuth client ID').addText((t) => { t.setValue(id).onChange((v) => { id = v; }); t.inputEl.style.width = '100%'; });
     new Setting(c).setName('OAuth client secret').addText((t) => { t.inputEl.type = 'password'; t.setValue(secret).onChange((v) => { secret = v; }); });
     // or pick the client_secret_....json Google downloads, instead of pasting both
-    new Setting(c).setName('Or load the file from Google').setDesc('The client_secret_....json file Google downloads when you make the client.').addButton((b) => b.setButtonText('Choose file').onClick(() => {
-      const input = createEl('input', { attr: { type: 'file', accept: '.json,application/json' } });
-      input.onchange = async () => {
-        const file = input.files?.[0]; if (!file) return;
+    const loadClient = (text: string) => {
+      try {
+        const j = JSON.parse(text); const k = j.installed ?? j.web ?? j;
+        if (!k.client_id || !k.client_secret) throw new Error('no client_id or client_secret in that file');
+        P.google.setClient(String(k.client_id), String(k.client_secret));
+        new Notice('Space Calendar: client loaded. Now click Save and connect.'); this.display();
+      } catch (e) { new Notice('Space Calendar: ' + (e instanceof Error ? e.message : String(e)), 8000); }
+    };
+    new Setting(c).setName('Or load the file from Google').setDesc('The client_secret_....json file Google downloads when you make the client.').addButton((b) => b.setButtonText('Choose file').onClick(async () => {
+      // desktop: the system's own Open dialog (a file input outside the page does not open in Obsidian)
+      if (Platform.isDesktopApp) {
         try {
-          const j = JSON.parse(await file.text()); const k = j.installed ?? j.web ?? j;
-          if (!k.client_id || !k.client_secret) throw new Error('no client_id or client_secret in that file');
-          P.google.setClient(String(k.client_id), String(k.client_secret));
-          new Notice('Space Calendar: client loaded. Now click Save and connect.'); this.display();
-        } catch (e) { new Notice('Space Calendar: ' + (e instanceof Error ? e.message : String(e)), 8000); }
-      };
+          const req = (window as unknown as { require: (m: string) => any }).require;
+          const res = await req('@electron/remote').dialog.showOpenDialog({ properties: ['openFile'], filters: [{ name: 'Google client', extensions: ['json'] }] });
+          if (res.canceled || !res.filePaths[0]) return;
+          loadClient(req('fs').readFileSync(res.filePaths[0], 'utf8'));
+          return;
+        } catch { /* fall through to the file input */ }
+      }
+      const input = document.body.createEl('input', { attr: { type: 'file', accept: '.json,application/json' } });
+      input.style.display = 'none';
+      input.onchange = async () => { const f = input.files?.[0]; input.remove(); if (f) loadClient(await f.text()); };
       input.click();
     }));
     const g = new Setting(c).setName(P.google.connected() ? 'Connected' + (P.google.email() ? ' as ' + P.google.email() : '') : 'Not connected');
