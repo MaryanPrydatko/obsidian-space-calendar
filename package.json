@@ -1,0 +1,20 @@
+{
+  "name": "obsidian-space-calendar",
+  "version": "0.1.0",
+  "description": "The Space calendar in Obsidian: Kanban cards, daily notes, ICS feeds and Google Calendar.",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc --noEmit && node esbuild.config.mjs production",
+    "dev": "node esbuild.config.mjs",
+    "test": "TZ=Europe/Berlin node --test test/*.test.ts",
+    "deploy": "npm run build && node scripts/deploy.mjs"
+  },
+  "license": "MIT",
+  "devDependencies": {
+    "esbuild": "^0.28.2",
+    "obsidian": "^1.14.4",
+    "tslib": "^2.9.1",
+    "typescript": "^5.9.3"
+  }
+}
