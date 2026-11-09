@@ -83,3 +83,10 @@ test('rewrite refuses a changed card, a doubled card, two dates, and a stale dat
   assert.throws(() => rewriteDate(board, two.line, two.raw, two.date, '2026-11-12'), RewriteError);
   assert.throws(() => rewriteDate(board, c.line, c.raw, '2026-01-01', '2026-11-12'), RewriteError);
 });
+
+test('a time taken out of the middle leaves no stray comma', () => {
+  const cs = parseBoard('- [ ] LA class: exam prep, 9:00. Ask Protim the open questions @{2026-11-13} [[SE_28#Ask Protim]]\n- [ ] Class: exam prep, Big-O and code snippets, 14:00. Ask about past papers @{2026-11-12}', 'b.md', true);
+  assert.equal(cs[0].title, 'LA class: exam prep. Ask Protim the open questions');
+  assert.equal(cs[0].time, '09:00');
+  assert.equal(cs[1].title, 'Class: exam prep, Big-O and code snippets. Ask about past papers');
+});

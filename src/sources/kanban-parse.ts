@@ -36,7 +36,7 @@ export function cardTitle(text: string, timePhrase?: string): string {
   const links: string[] = [];
   t = t.replace(/!?\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g, (_m, target: string, alias?: string) => { links.push(alias || target.replace(/#.*/, '')); return alias ? alias : ''; });
   t = t.replace(/\[([^\]]+)\]\([^)]*\)/g, '$1').replace(/\*\*|__/g, '');
-  t = t.replace(/\s*,\s*(,\s*)+/g, ', ').replace(/\s+([,.;)])/g, '$1').replace(/\(\s*\)/g, '').replace(/\s{2,}/g, ' ').trim().replace(/^[,;\s]+|[,;\s]+$/g, '');
+  t = t.replace(/,\s*([.;])/g, '$1').replace(/\s*,\s*(,\s*)+/g, ', ').replace(/\s+([,.;)])/g, '$1').replace(/\(\s*\)/g, '').replace(/\s{2,}/g, ' ').trim().replace(/^[,;\s]+|[,;\s]+$/g, '');
   return t || links[0] || '(untitled)';
 }
 
