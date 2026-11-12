@@ -27,7 +27,7 @@ Desktop, iPad and iPhone. Connecting Google works in the desktop app; ICS feeds,
 
 ## For agents
 
-The plugin exposes `app.plugins.plugins['space-calendar'].api` for scripts and agents, through the Obsidian CLI (`obsidian eval`, Obsidian 1.12 and later). It uses the Google accounts already connected here, so no token leaves Obsidian. JSON in and out; times are local, `YYYY-MM-DDTHH:mm`, days `YYYY-MM-DD`; an all-day event's end is its last day.
+The plugin exposes `app.plugins.plugins['space-calendar'].api` for scripts and agents, through the Obsidian CLI (`obsidian eval`, tested on Obsidian 1.15.1). It uses the Google accounts already connected here, so no token leaves Obsidian. JSON in and out; times are local, `YYYY-MM-DDTHH:mm`, days `YYYY-MM-DD`; an all-day event's end is its last day.
 
 ```sh
 obsidian eval code="return JSON.stringify(await app.plugins.plugins['space-calendar'].api.events('2026-11-16', '2026-11-22'))"
