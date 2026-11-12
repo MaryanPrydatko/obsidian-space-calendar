@@ -120,6 +120,7 @@ export function day(C: V, main: HTMLElement): void {
   const sc = el('div', 'scroll'), wrap = el('div', 'day ' + C.orient); sc.append(wrap); main.append(sc);
   const d = C.focus, its = C.items.filter((it) => it.start < addDays(d, 1) && it.end > d), all = its.filter((it) => it.allDay), timed = its.filter((it) => !it.allDay);
   const [h0, h1] = hours(timed, [d]), ev = timed.filter((it) => it.kind === 'event'), notes = timed.filter((it) => it.kind === 'card');
+  const plan = notes.length > 0; // the My plan lane only on a day with a card at a set time
   // all-day items and the cards waiting to be placed sit above the hours, not in what scrolls
   const top = el('div', 'daytop');
   const wait = waiting(C, d, all), allRow = all.filter((it) => it.kind !== 'card' || it.done || !wait);
@@ -136,7 +137,7 @@ export function day(C: V, main: HTMLElement): void {
   if (C.orient === 'x') {
     // Across: hours left to right; the calendar band, then my plan; lanes grow to fill the height
     const H = Math.round((phone ? 96 : 132) * C.hz), avail = Math.max(260, main.clientHeight - (all.length ? 120 : 80));
-    const nEv = ev.length ? C.pack(ev.slice(), (124 / H) * 3600e3) : 1, nNo = notes.length ? C.pack(notes.slice(), (124 / H) * 3600e3) : 1;
+    const nEv = ev.length ? C.pack(ev.slice(), (124 / H) * 3600e3) : 1, nNo = plan ? C.pack(notes.slice(), (124 / H) * 3600e3) : 0;
     const LH = Math.max(64, Math.min(116, Math.floor((avail - 60) / (nEv + nNo + 0.6) - 10)));
     const body = el('div', 'tl x'); wrap.append(body);
     body.append(ruler('x', h0, h1, H, 0, 1));
@@ -144,22 +145,24 @@ export function day(C: V, main: HTMLElement): void {
     const lab = (txt: string, hint?: string) => { const l = el('div', 'band-label', txt); if (hint) l.append(el('span', 'hint', hint)); body.append(l); };
     lab('Calendar', g ? (t ? 'double-tap' : 'double-click or drag across') + ' empty time for a Google event' : '');
     body.append(box(C, { list: ev, day: d, h0, h1, along: 'x', scale: H, lane: LH, gap: 8, minPx: 124, editable: true }));
-    lab('My plan', 'cards from your boards; click one to open its board');
-    body.append(box(C, { list: notes, day: d, h0, h1, along: 'x', scale: H, lane: Math.min(LH, 84), gap: 8, minPx: 124, editable: true, plan: true }));
+    if (plan) {
+      lab('My plan', 'cards from your boards; click one to open its board');
+      body.append(box(C, { list: notes, day: d, h0, h1, along: 'x', scale: H, lane: Math.min(LH, 84), gap: 8, minPx: 124, editable: true, plan: true }));
+    }
     for (let h = h0; h <= h1; h++) { const gl = el('div', 'grid-line x'); gl.style.left = (h - h0) * H + 'px'; body.append(gl); }
     if (today && nowH >= h0 && nowH < h1) { nowLine(body, 'x', (nowH - h0) * H, true); scrollTo(sc, 'scrollLeft', Math.max(0, (nowH - h0) * H - 140)); }
     else { const f = timed.slice().sort((a, b) => +a.start - +b.start)[0]; if (f) scrollTo(sc, 'scrollLeft', Math.max(0, (f.start.getHours() - h0) * H - 40)); }
   } else {
     // Down: hours top to bottom; the calendar on the left, my plan beside it
-    const H = Math.round(Math.max(56, Math.min(84, Math.floor((main.clientHeight - 120) / 11))) * C.hz), Wd = Math.max(280, main.clientWidth - 40 - 56), wEv = Math.round(Wd * 0.6), wNo = Wd - wEv - 12;
+    const H = Math.round(Math.max(56, Math.min(84, Math.floor((main.clientHeight - 120) / 11))) * C.hz), Wd = Math.max(280, main.clientWidth - 40 - 56), wEv = plan ? Math.round(Wd * 0.6) : Wd, wNo = Wd - wEv - 12;
     const body = el('div', 'tl y'); body.style.cssText = `position:relative;padding-left:56px;height:${(h1 - h0) * H + 30}px`; wrap.append(body);
     const heads = el('div', 'col-heads'); heads.style.cssText = 'padding-left:56px;display:flex;gap:12px'; const hd = (txt: string, w: number) => { const s = el('div', 'band-label', txt); s.style.width = w + 'px'; heads.append(s); };
-    hd('Calendar', wEv); hd('My plan', wNo); wrap.insertBefore(heads, body);
+    hd('Calendar', wEv); if (plan) hd('My plan', wNo); wrap.insertBefore(heads, body);
     body.append(ruler('y', h0, h1, H, 0, 1));
     for (let h = h0; h <= h1; h++) { const gl = el('div', 'grid-line y'); gl.style.top = (h - h0) * H + 'px'; body.append(gl); }
     const row = el('div'); row.style.cssText = 'display:flex;gap:12px;position:relative'; body.append(row);
     row.append(box(C, { list: ev, day: d, h0, h1, along: 'y', scale: H, width: wEv, gap: 6, minPx: t ? 44 : 40, editable: true }));
-    row.append(box(C, { list: notes, day: d, h0, h1, along: 'y', scale: H, width: wNo, gap: 6, minPx: t ? 44 : 40, editable: true, plan: true }));
+    if (plan) row.append(box(C, { list: notes, day: d, h0, h1, along: 'y', scale: H, width: wNo, gap: 6, minPx: t ? 44 : 40, editable: true, plan: true }));
     if (today && nowH >= h0 && nowH < h1) { nowLine(body, 'y', (nowH - h0) * H, true); scrollTo(sc, 'scrollTop', Math.max(0, (nowH - h0) * H - 120)); }
   }
 }
