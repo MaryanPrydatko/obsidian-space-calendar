@@ -186,6 +186,17 @@ export class GoogleSource {
     void this.fetch(addDays(a, -14), addDays(end, 14));
   }
   refresh(): void { if (this.span) void this.fetch(new Date(this.span.a), new Date(this.span.b)); }
+  /** For the agent API: reads the weeks around a range now and waits for Google's answer. Throws when it could not read. */
+  async load(a: Date, end: Date): Promise<void> {
+    if (!this.connected()) throw new GoogleError(401, 'Google is not connected');
+    for (let i = 0; i < 3; i++) {
+      while (this.loading) await new Promise((r) => setTimeout(r, 100));
+      await this.fetch(addDays(a, -14), addDays(end, 14));
+      if (this.st !== 'ok') throw new GoogleError(0, 'Google could not be read (' + this.st + ')');
+      if (this.span && this.span.a <= +a && this.span.b >= +end) return; // else a change landed meanwhile: read again
+    }
+    throw new GoogleError(0, 'Google could not be read (busy)');
+  }
   private async fetch(a: Date, b: Date): Promise<void> {
     this.loading = true; const n = ++this.seq;
     try {

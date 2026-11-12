@@ -25,6 +25,28 @@ Desktop, iPad and iPhone. Connecting Google works in the desktop app; ICS feeds,
 3. **ICS feeds**, read only. Paste one iCal address per line in settings. Timed, all-day and TZID times; DAILY, WEEKLY (BYDAY), MONTHLY and YEARLY repeats with INTERVAL, COUNT, UNTIL, EXDATE and moved single days. Feeds refresh every 15 minutes and with the command "Refresh calendar feeds".
 4. **Google Calendar**, read and write, once an OAuth client ID is entered. Drag empty time to make an event (double-click for an hour), drag an event to move it, drag its edges to stretch it, Alt-drag to copy, click it for the editor (name, time, all day, colour, place, description, delete), arrow keys move the picked event, Delete twice deletes. A repeating event changes only the day you changed. Several Google accounts can be connected at once.
 
+## For agents
+
+The plugin exposes `app.plugins.plugins['space-calendar'].api` for scripts and agents, through the Obsidian CLI (`obsidian eval`, Obsidian 1.12 and later). It uses the Google accounts already connected here, so no token leaves Obsidian. JSON in and out; times are local, `YYYY-MM-DDTHH:mm`, days `YYYY-MM-DD`; an all-day event's end is its last day.
+
+```sh
+obsidian eval code="return JSON.stringify(await app.plugins.plugins['space-calendar'].api.events('2026-11-16', '2026-11-22'))"
+```
+
+| Call | Does |
+|---|---|
+| `status()` | Google state, connected accounts, number of boards |
+| `calendars()` | every calendar: id, name, account, access, primary, `isDefault` (where new events go) |
+| `events(from, to)` | every Google event in those days, read fresh, sorted |
+| `cards(from?, to?)` | every dated card: board path, line, date, time, done, title, column, the raw line |
+| `create({ title, start, end, allDay?, desc?, location?, colorId?, calendar? })` | a new event, in the default calendar unless `calendar` names one |
+| `update(id, fields)` | changes only those fields; a new start keeps the length; a repeating event changes on that day only |
+| `remove(id)` | deletes the event |
+| `moveCard(board, line, date)` | changes only that card's `@{date}`, with the same check as dragging it |
+| `tickCard(board, line, done = true)` | ticks or unticks that card, same check |
+
+`update` and `remove` take an id from `events()` read in the same session.
+
 ## Privacy and sync
 
 `data.json` (synced and committed with the vault) holds only: week start, the view a new tab opens in, the daily notes folder, and two toggles.

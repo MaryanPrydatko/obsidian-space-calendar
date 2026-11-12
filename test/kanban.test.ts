@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { parseBoard, rewriteDate, RewriteError } from '../src/sources/kanban-parse.ts';
+import { parseBoard, rewriteDate, rewriteDone, RewriteError } from '../src/sources/kanban-parse.ts';
 
 const board = `---
 kanban-plugin: board
@@ -89,4 +89,20 @@ test('a time taken out of the middle leaves no stray comma', () => {
   assert.equal(cs[0].title, 'LA class: exam prep. Ask Protim the open questions');
   assert.equal(cs[0].time, '09:00');
   assert.equal(cs[1].title, 'Class: exam prep, Big-O and code snippets. Ask about past papers');
+});
+
+test('tick and untick change only that box on that line', () => {
+  const cs = parseBoard(board, 'b.md', true), c = cs[1];
+  const out = rewriteDone(board, c.line, c.raw, true);
+  const a = board.split('\n'), b = out.split('\n');
+  assert.deepEqual(a.map((l, i) => (l === b[i] ? -1 : i)).filter((i) => i >= 0), [c.line]);
+  assert.equal(b[c.line], '- [x] Dussmann: gift for her, 19:00 @{2026-11-09} [[Life task notes]]');
+  const done = cs[5];
+  assert.ok(rewriteDone(board, done.line, done.raw, false).split('\n')[done.line].startsWith('- [ ] Assignment 2'));
+});
+
+test('tick refuses a card that changed or appears twice', () => {
+  const c = parseBoard(board, 'b.md', true)[1];
+  assert.throws(() => rewriteDone(board.replace(c.raw, c.raw + ' edited'), c.line, c.raw, true), RewriteError);
+  assert.throws(() => rewriteDone(board.replace('- [ ] No date here', c.raw), 99, c.raw, true), RewriteError);
 });

@@ -71,20 +71,30 @@ export function parseBoard(text: string, path: string, textTimes: boolean): Card
 
 export class RewriteError extends Error {}
 
+/** Where the card's line is now: at its old index when it still reads the same, else the only line that reads so. */
+function findLine(lines: string[], line: number, raw: string): number {
+  if (lines[line] === raw) return line;
+  const hits: number[] = []; lines.forEach((l, k) => { if (l === raw) hits.push(k); });
+  if (hits.length !== 1) throw new RewriteError(hits.length ? 'That card appears more than once on its board, so it was left as it is.' : 'That card changed on its board since it was read, so it was left as it is.');
+  return hits[0];
+}
+
 /** The file with one card's date changed, and nothing else. The card's line must still read exactly as it did; when it
  *  moved, it must be the only line that reads so. The line must hold exactly one `@{date}`. Throws RewriteError otherwise. */
 export function rewriteDate(data: string, line: number, raw: string, from: string, to: string): string {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(to)) throw new RewriteError('Not a date: ' + to);
-  const lines = data.split('\n');
-  let idx = line;
-  if (lines[idx] !== raw) {
-    const hits: number[] = []; lines.forEach((l, k) => { if (l === raw) hits.push(k); });
-    if (hits.length !== 1) throw new RewriteError(hits.length ? 'That card appears more than once on its board, so it was left as it is.' : 'That card changed on its board since it was read, so it was left as it is.');
-    idx = hits[0];
-  }
+  const lines = data.split('\n'), idx = findLine(lines, line, raw);
   const tokens = raw.match(DATE_TOKEN) || [];
   if (tokens.length !== 1) throw new RewriteError('That card has ' + tokens.length + ' dates in it, so it was left as it is.');
   if (tokens[0] !== '@{' + from + '}') throw new RewriteError('That card has another date now, so it was left as it is.');
   lines[idx] = raw.replace(tokens[0], '@{' + to + '}');
+  return lines.join('\n');
+}
+
+/** The file with one card ticked (`- [x]`) or unticked (`- [ ]`), and nothing else. Same checks as rewriteDate. */
+export function rewriteDone(data: string, line: number, raw: string, done: boolean): string {
+  const lines = data.split('\n'), idx = findLine(lines, line, raw);
+  if (!CARD.test(raw.replace(/\r$/, ''))) throw new RewriteError('That line is not a card, so it was left as it is.');
+  lines[idx] = raw.replace(/^- \[[ xX]\]/, done ? '- [x]' : '- [ ]');
   return lines.join('\n');
 }

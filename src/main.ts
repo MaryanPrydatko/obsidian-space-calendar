@@ -6,6 +6,7 @@ import { DailySource } from './sources/daily';
 import { IcsSource } from './sources/ics';
 import { GoogleSource } from './sources/google';
 import { SpaceCalendarView, VIEW_TYPE } from './view';
+import { SpaceCalendarApi } from './api';
 import { colorFor } from './util';
 
 export default class SpaceCalendarPlugin extends Plugin {
@@ -15,6 +16,8 @@ export default class SpaceCalendarPlugin extends Plugin {
   daily!: DailySource;
   ics!: IcsSource;
   google!: GoogleSource;
+  /** For agents, through `obsidian eval`: see src/api.ts. */
+  api!: SpaceCalendarApi;
   private listeners = new Set<() => void>();
 
   async onload(): Promise<void> {
@@ -25,6 +28,7 @@ export default class SpaceCalendarPlugin extends Plugin {
     this.daily = new DailySource(this.app, () => this.settings.dailyFolder);
     this.ics = new IcsSource(this.local, changed);
     this.google = new GoogleSource(this.local, changed);
+    this.api = new SpaceCalendarApi(this);
 
     this.registerView(VIEW_TYPE, (leaf: WorkspaceLeaf) => new SpaceCalendarView(leaf, this));
     this.addRibbonIcon('calendar-days', 'Open calendar', () => void this.openCalendar());

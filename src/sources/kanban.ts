@@ -1,5 +1,5 @@
 import { Notice, TFile, type App } from 'obsidian';
-import { parseBoard, rewriteDate, type Card } from './kanban-parse';
+import { parseBoard, rewriteDate, rewriteDone, type Card } from './kanban-parse';
 
 /** Every dated card on every Kanban board in the vault, kept up to date as boards change. */
 export class KanbanSource {
@@ -51,5 +51,16 @@ export class KanbanSource {
       await this.read(f); this.changed();
       return null;
     }
+  }
+
+  /** Ticks or unticks one card: only its `- [ ]` on that exact line changes. Throws (and writes nothing) when the line
+   *  no longer reads as it did. */
+  async setDone(card: Card, done: boolean): Promise<void> {
+    const f = this.app.vault.getAbstractFileByPath(card.path);
+    if (!(f instanceof TFile)) throw new Error('the board ' + card.path + ' is gone');
+    try {
+      rewriteDone(await this.app.vault.read(f), card.line, card.raw, done); // checked first
+      await this.app.vault.process(f, (data) => rewriteDone(data, card.line, card.raw, done));
+    } finally { await this.read(f); this.changed(); }
   }
 }
