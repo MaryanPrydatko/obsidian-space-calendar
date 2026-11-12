@@ -216,6 +216,8 @@
   .wchip.late { background: color-mix(in srgb, var(--now) 8%, var(--surface)); }
   .wchip .wt { font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .wchip .we { font-size: 11.5px; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .wchip .wtick { flex: none; width: 16px; height: 16px; min-height: 0; padding: 0; border-radius: 5px; border: 1.5px solid var(--c); background: transparent; box-shadow: none; cursor: pointer; }
+  .wchip .wtick:hover { background: color-mix(in srgb, var(--c) 35%, transparent); }
   .wchip .wadd { border: 0; border-radius: 7px; background: var(--surface-2); font-size: 12px; font-weight: 650; padding: 3px 8px; cursor: pointer; min-height: 0; }
   .tbox.plan { background: color-mix(in srgb, var(--surface-2) 45%, transparent); border-radius: 12px; min-height: 64px; }
   .sc-toast { position: absolute; left: 50%; bottom: 18px; transform: translate(-50%, 20px); opacity: 0; z-index: 30; background: var(--ink); color: var(--bg); border-radius: 12px; padding: 10px 14px; font-size: 14px; font-weight: 500; display: flex; gap: 12px; align-items: center; pointer-events: none; transition: opacity 0.18s, transform 0.18s; max-width: calc(100% - 32px); }

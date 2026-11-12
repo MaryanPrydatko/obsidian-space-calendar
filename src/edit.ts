@@ -23,6 +23,16 @@ export async function moveCard(C: V, it: Item, to: string): Promise<void> {
     void C.plugin.kanban.reschedule(now, from).then((back) => { if (back) C.toast('Back on ' + dayShort(fromIso(from))); });
   });
 }
+/** Ticks a card on its board (only its `- [ ]` changes), with Undo. */
+export async function tickCard(C: V, it: Item): Promise<void> {
+  const card = it.card; if (!card || card.done) return;
+  try { await C.plugin.kanban.setDone(card, true); } catch (e) { C.toast('Not ticked: ' + (e instanceof Error ? e.message : String(e))); return; }
+  const raw = card.raw.replace(/^- \[ \]/, '- [x]');
+  C.toast('Ticked "' + it.title + '"', () => {
+    const now = C.plugin.kanban.cards().find((c) => c.path === card.path && c.raw === raw);
+    if (now) void C.plugin.kanban.setDone(now, false).then(() => C.toast('Open again'), () => C.toast('That card changed meanwhile, so it stays ticked.'));
+  });
+}
 /** A card follows the pointer; let go over another day (a day column, a row of the week, a cell of the month) and it moves there. */
 export function cardDrag(C: V, node: HTMLElement, it: Item): void {
   node.classList.add('can-move');

@@ -100,7 +100,9 @@ function waiting(C: V, d: Date, untimed: Item[]): HTMLElement | null {
 }
 function wchip(C: V, it: Item, late: boolean): HTMLElement {
   const c = it.card!, chip = el('div', 'wchip' + (late ? ' late' : '')); chip.style.setProperty('--c', it.color || C.plugin.colorOf(c.path));
-  chip.append(el('span', 'wt', it.title));
+  const tick = el('button', 'wtick'); tick.type = 'button'; tick.title = 'Done: tick it on its board'; tick.setAttribute('aria-label', 'Done');
+  tick.onclick = (e) => { e.stopPropagation(); void E.tickCard(C, it); };
+  chip.append(tick, el('span', 'wt', it.title));
   chip.append(el('span', 'we', late ? new Date(c.date + 'T12:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) : it.calName || ''));
   if (late) {
     const add = el('button', 'wadd', 'Today'); add.type = 'button'; add.title = 'Move it to today (its date on the board changes)';
