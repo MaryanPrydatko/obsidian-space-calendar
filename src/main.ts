@@ -33,7 +33,7 @@ export default class SpaceCalendarPlugin extends Plugin {
     this.registerView(VIEW_TYPE, (leaf: WorkspaceLeaf) => new SpaceCalendarView(leaf, this));
     this.addRibbonIcon('calendar-days', 'Open calendar', () => void this.openCalendar());
     this.addCommand({ id: 'open-calendar', name: 'Open calendar', callback: () => void this.openCalendar() });
-    this.addCommand({ id: 'refresh-feeds', name: 'Refresh calendar feeds', callback: () => { void this.ics.refresh(); this.google.refresh(); } });
+    this.addCommand({ id: 'refresh-feeds', name: 'Refresh calendar feeds', callback: () => void this.refreshAll() });
     this.addSettingTab(new SpaceCalSettingTab(this.app, this));
 
     const daily = (f: { path: string }) => { if (f.path.startsWith(this.settings.dailyFolder.replace(/\/+$/, '') + '/')) { this.daily.invalidate(); changed(); } };
@@ -45,9 +45,16 @@ export default class SpaceCalendarPlugin extends Plugin {
     this.app.workspace.onLayoutReady(() => {
       void this.kanban.scanAll();
       void this.ics.refresh();
-      this.registerInterval(window.setInterval(() => { void this.ics.refresh(); this.google.refresh(); }, 15 * 60e3));
+      this.registerInterval(window.setInterval(() => { void this.ics.refresh(); void this.google.refresh(); }, 15 * 60e3));
+      // back in Obsidian (the phone app reopened, or the window focused) with an open calendar: read again, a change made in Google meanwhile shows
+      const back = () => { if (document.visibilityState === 'visible' && this.google.stale(60e3) && this.app.workspace.getLeavesOfType(VIEW_TYPE).length) void this.refreshAll(); };
+      this.registerDomEvent(document, 'visibilitychange', back);
+      this.registerDomEvent(window, 'focus', back);
     });
   }
+
+  /** Reads the ICS feeds and Google again now, Google's calendar list too. */
+  async refreshAll(): Promise<void> { await Promise.all([this.ics.refresh(), this.google.refresh(true)]); }
 
   onChange(f: () => void): () => void { this.listeners.add(f); return () => this.listeners.delete(f); }
   colorOf(path: string): string { return colorFor(path); }

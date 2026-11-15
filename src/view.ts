@@ -316,6 +316,7 @@ export class SpaceCalendarView extends ItemView {
     B.prev = btn(step, '‹', () => this.step(-1), 'Back');
     btn(step, 'Today', () => { this.goNow = true; this.focus = day0(new Date()); this.reload(); });
     B.next = btn(step, '›', () => this.step(1), 'Forward');
+    const re = btn(step, '↻', () => { re.disabled = true; void this.plugin.refreshAll().finally(() => { re.disabled = false; }); this.reload(); }, 'Read all calendars again');
   }
 
   draw(): void {

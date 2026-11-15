@@ -185,7 +185,13 @@ export class GoogleSource {
     if (covers && Date.now() - s!.at < 5 * 60e3) return;
     void this.fetch(addDays(a, -14), addDays(end, 14));
   }
-  refresh(): void { if (this.span) void this.fetch(new Date(this.span.a), new Date(this.span.b)); }
+  /** Reads the shown weeks again; with lists, the calendar list too (a calendar added or ticked in Google). */
+  refresh(lists = false): Promise<void> {
+    if (lists) this.cals = null;
+    return this.span ? this.fetch(new Date(this.span.a), new Date(this.span.b)) : Promise.resolve();
+  }
+  /** The copy here is older than ms and no read is running. */
+  stale(ms: number): boolean { return !!this.span && !this.loading && Date.now() - this.span.at > ms; }
   /** For the agent API: reads the weeks around a range now and waits for Google's answer. Throws when it could not read. */
   async load(a: Date, end: Date): Promise<void> {
     if (!this.connected()) throw new GoogleError(401, 'Google is not connected');

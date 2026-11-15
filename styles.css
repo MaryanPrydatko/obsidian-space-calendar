@@ -41,6 +41,7 @@
   .when { font-weight: 650; font-size: 19px; letter-spacing: -0.01em; margin-right: auto; }
   .step { display: inline-flex; gap: 4px; }
   .step button { border: 1px solid var(--rule); background: var(--surface); border-radius: 10px; padding: 7px 12px; cursor: pointer; font-weight: 600; font-size: 14px; }
+  .step button:disabled { opacity: .5; cursor: default; }
   .note-off { color: var(--muted); font-size: 13px; }
   .sc-main { flex: 1; min-height: 0; overflow: hidden; position: relative; display: flex; flex-direction: column; }
   .scroll { flex: 1; overflow: auto; overscroll-behavior: contain; position: relative; }
